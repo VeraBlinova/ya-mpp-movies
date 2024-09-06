@@ -1,0 +1,43 @@
+version: '3'
+services:
+  
+  db-auth:
+    extends:
+      file: ./docker-compose.yml
+      service: db-auth
+    ports:
+      - "5434:5432"
+
+  db-token:
+    extends:
+      file: ./docker-compose.yml
+      service: db-token
+    ports:
+      - "6380:6379"
+
+  authapi-migrations:
+    extends:
+      file: ./docker-compose.yml
+      service: authapi-migrations
+    volumes:
+      - ./src/:/opt/app/
+
+  authapi:
+    extends:
+      file: ./docker-compose.yml
+      service: authapi
+    volumes:
+      - ./src/:/opt/app/
+    ports:
+      - "8000:8000"
+
+  jaeger-service:
+    extends:
+      file: ./docker-compose.yml
+      service: jaeger-service
+    ports:
+      - "16686:16686"
+
+volumes:
+  token_db:
+  auth_db:

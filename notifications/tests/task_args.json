@@ -1,0 +1,12 @@
+{
+    "msg_to": [
+        "noc@tz5.ru "
+    ],
+    "msg_subj": "test worker ",
+    "template_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "template_data": {
+        "title": "Новое письмо! ",
+        "text": "Произошло что-то интересное! :) ",
+        "image": "https://pictures.s3.yandex.net:443/resources/news_1682073799.jpeg "
+    }
+}

@@ -1,0 +1,67 @@
+version: '3'
+
+services:
+  rabbitmq:
+    extends:
+      file: ./docker-compose.yml
+      service: rabbitmq
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+
+  worker-1:
+    extends:
+      file: ./docker-compose.yml
+      service: worker-1
+
+  worker-2:
+    extends:
+      file: ./docker-compose.yml
+      service: worker-2
+
+  worker-3:
+    extends:
+      file: ./docker-compose.yml
+      service: worker-3
+
+  worker-4:
+    extends:
+      file: ./docker-compose.yml
+      service: worker-4
+
+  flower:
+    extends:
+      file: ./docker-compose.yml
+      service: flower
+
+  db-notification:
+    extends:
+      file: ./docker-compose.yml
+      service: db-notification
+    ports:
+      - "5432:5432"
+
+  dja-admin:
+    extends:
+      file: ./docker-compose.yml
+      service: dja-admin
+
+  celery-beat:
+    extends:
+      file: ./docker-compose.yml
+      service: celery-beat
+  
+  migrations:
+    extends:
+      file: ./docker-compose.yml
+      service: migrations
+  
+  notifications:
+    extends:
+      file: ./docker-compose.yml
+      service: notifications
+
+      
+volumes:
+  rabbitmq:
+  postgres_data:

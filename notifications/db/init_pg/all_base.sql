@@ -1,0 +1,4 @@
+CREATE DATABASE celery_cron;
+CREATE DATABASE notification_db;
+GRANT ALL PRIVILEGES ON DATABASE celery_cron TO app;
+GRANT ALL PRIVILEGES ON DATABASE notification_db TO app;

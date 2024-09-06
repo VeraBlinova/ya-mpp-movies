@@ -1,0 +1,177 @@
+version: '3.8'
+
+x-mongo-common:
+  &mongo-common
+  image: mongo:5.0.21
+  networks:
+    - mongo_network
+
+  healthcheck:
+    test: echo 'db.runCommand("ping").ok' | mongo $(hostname)/test --quiet
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 10s
+
+x-postgres-common:
+  &postgres-common
+  image: postgres
+  user: postgres
+  restart: always
+  networks:
+    - postgres_network
+  healthcheck:
+    test: 'pg_isready -U user -d test_db'
+    interval: 10s
+    timeout: 5s
+    retries: 5
+
+services:
+  mongo_cnf:
+    <<: *mongo-common
+    hostname: mongo_cnf
+    container_name: mongo_cnf
+    command: mongod --configsvr --replSet mongo_cnf --dbpath /data/db --port 27017 --bind_ip localhost,mongo_cnf
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - mongo_cnf_n1_data:/data/db
+
+  config_cnf_rs:
+    <<: *mongo-common
+    volumes:
+      - ./mongo/cnf_setup.js:/conf/setup.js
+    command: [
+      "mongosh",
+      "--host",
+      "mongo_cnf",
+      "--port",
+      "27017",
+      "/conf/setup.js"
+    ]
+    depends_on:
+      mongo_cnf:
+        condition: service_healthy
+
+  mongo_n1:
+    <<: *mongo-common
+    hostname: mongo_n1
+    container_name: mongo_n1
+    command: mongod --shardsvr --replSet mongo_rs1 --dbpath /data/db --port 27017 --bind_ip localhost,mongo_n1
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - mongo_n1_data:/data/db
+
+  mongo_n2:
+    <<: *mongo-common
+    hostname: mongo_n2
+    container_name: mongo_n2
+    command: mongod --shardsvr --replSet mongo_rs1 --dbpath /data/db --port 27017 --bind_ip localhost,mongo_n2
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - mongo_n2_data:/data/db
+
+  config_rs1:
+    <<: *mongo-common
+    volumes:
+      - ./mongo/rs_1_setup.js:/conf/setup.js
+    command: [
+      "mongosh",
+      "--host",
+      "mongo_n1",
+      "--port",
+      "27017",
+      "/conf/setup.js"
+    ]
+    depends_on:
+      mongo_n1:
+        condition: service_healthy
+      mongo_n2:
+        condition: service_healthy
+
+  mongos:
+    <<: *mongo-common
+    command: mongos --configdb mongo_cnf/mongo_cnf:27017 --port 27017 --bind_ip localhost,mongos
+    hostname: mongos
+    container_name: mongos
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=test_db
+    depends_on:
+      config_rs1:
+        condition: service_completed_successfully
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+
+  config_shared_cluster:
+    <<: *mongo-common
+    command: [
+      "mongosh",
+      "--host",
+      "mongos",
+      "--port",
+      "27017",
+      "/conf/setup.js"
+    ]
+    volumes:
+      - ./mongo/cluster_setup.js:/conf/setup.js
+    depends_on:
+      mongos:
+        condition: service_healthy
+
+
+  postgres_primary:
+    <<: *postgres-common
+    ports:
+      - 5500:5432
+    environment:
+      POSTGRES_USER: user_db
+      POSTGRES_DB: test_db
+      POSTGRES_PASSWORD: password_db
+      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256\nhost replication all 0.0.0.0/0 md5"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    command: |
+      postgres 
+      -c wal_level=replica 
+      -c hot_standby=on 
+      -c max_wal_senders=10 
+      -c max_replication_slots=10 
+      -c hot_standby_feedback=on
+      -c search_path=public,test_db
+    volumes:
+      - ./postgres/db_init.sql:/docker-entrypoint-initdb.d/db_init.sql
+      - postgres1_data:/var/lib/postgresql/data
+
+  postgres_replica:
+    <<: *postgres-common
+    ports:
+      - 5434:5432
+    environment:
+      PGUSER: replicator
+      PGPASSWORD: replicator_password
+    command: |
+      bash -c "
+      until pg_basebackup --pgdata=/var/lib/postgresql/data -R --slot=replication_slot --host=postgres_primary --port=5432
+      do
+      echo 'Waiting for primary to connect...'
+      sleep 1s
+      done
+      echo 'Backup done, starting replica...'
+      chmod 0700 /var/lib/postgresql/data
+      postgres
+      "
+    depends_on:
+      - postgres_primary
+    volumes:
+      - postgres2_data:/var/lib/postgresql/data
+
+networks:
+  mongo_network:
+  postgres_network:
+
+volumes:
+  mongo_cnf_n1_data:
+  mongo_n1_data:
+  mongo_n2_data:
+  postgres1_data:
+  postgres2_data:

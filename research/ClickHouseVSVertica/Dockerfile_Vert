@@ -1,0 +1,7 @@
+FROM python:3.11-alpine
+WORKDIR /src
+
+COPY ../../fastapi-solution/src .
+RUN pip3 install -r src/vertica/requirements.txt
+
+ENTRYPOINT ["python", "src/vertica/v_load.py"]

@@ -1,0 +1,357 @@
+version: '3.9'
+
+x-logging: 
+      &default-logging
+      driver: gelf
+      options:
+        gelf-address: udp://localhost:5045
+
+services:
+  etl-ugc:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: etl
+    logging: *default-logging
+
+  zookeeper:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: zookeeper
+    logging: *default-logging
+
+
+  clickhouse:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: clickhouse
+    ports:
+      - "8123:8123"
+      - "9002:9000"
+    logging: *default-logging
+
+      
+  eventapi:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: eventapi
+    ports:
+      - "5001:5000"
+    # Autoreload on code changes in debug mode
+    volumes:
+      - ./ugc/src/:/opt/app/
+    command: "python3 main.py"
+    logging: *default-logging
+
+
+  kafka-0:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: kafka-0
+    ports:
+      - "9094:9092"
+    logging: *default-logging
+
+
+  kafka-1:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: kafka-1
+    ports:
+      - "9095:9092"
+    logging: *default-logging
+
+
+  kafka-2:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: kafka-2
+    ports:
+      - "9096:9092"
+
+  kafka-ui:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: kafka-ui
+    ports:
+      - "8080:8080"
+    logging: *default-logging
+
+
+  db-auth:
+    extends:
+      file: ./authapi/docker-compose.yml
+      service: db-auth
+    ports:
+      - "5434:5432"
+    logging: *default-logging
+
+
+  db-token:
+    extends:
+      file: ./authapi/docker-compose.yml
+      service: db-token
+    ports:
+      - "6380:6379"
+    logging: *default-logging
+
+
+  authapi-migrations:
+    extends:
+      file: ./authapi/docker-compose.yml
+      service: authapi-migrations
+
+  authapi:
+    extends:
+      file: ./authapi/docker-compose.yml
+      service: authapi
+    ports:
+      - "8003:8000"
+    logging: *default-logging
+
+
+  jaeger-service:
+    extends:
+      file: ./authapi/docker-compose.yml
+      service: jaeger-service
+    ports:
+      - "16686:16686"
+    logging: *default-logging
+
+
+  db-file:
+    extends:
+      file: ./fileapi/docker-compose.yml
+      service: db-file
+    ports:
+      - "5433:5432"
+  
+  fastapi-file:
+    extends:
+      file: ./fileapi/docker-compose.yml
+      service: fastapi-file
+    ports:
+      - "8002:8000"
+    logging: *default-logging
+
+
+  api-migrations:
+    extends:
+      file: ./fileapi/docker-compose.yml
+      service: api-migrations
+    logging: *default-logging
+
+    
+  minio:
+    extends:
+      file: ./fileapi/docker-compose.yml
+      service: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    logging: *default-logging
+
+
+  db:
+    image: postgres:13
+    restart: "no"
+    command:
+      - "postgres"
+      - "-c"
+      - "search_path=public,content"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U app -d movies_database" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    env_file: ./postgres/.env
+    volumes:
+        - ./postgres/init_pg:/docker-entrypoint-initdb.d
+        - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    logging: *default-logging
+
+
+  nginx:
+    build:
+      context: ./nginx/
+      dockerfile: Dockerfile
+    ports:
+      - 80:80
+    volumes:
+      - static_volume:/code/static:ro
+    depends_on:
+      - django
+    logging: *default-logging
+
+
+  fastapi:
+    restart: always
+    build: ./fastapi_solution/src
+    env_file:
+      - ./fastapi_solution/api.env
+    depends_on:
+      redis:
+        condition: service_started
+      elasticsearch:
+        condition: service_started
+      db:
+        condition: service_healthy
+    ports:
+      - 8001:8000
+    volumes:
+      - ./fastapi_solution/src/:/opt/app/
+    logging: *default-logging
+
+
+  django:
+    build: ./django/
+    restart: always
+    env_file: ./django/.env
+    volumes:
+      - static_volume:/code/static
+      - ./sqlite_to_postgres:/in_data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      elasticsearch:
+        condition: service_started
+    ports:
+      - 8000:8000
+    logging: *default-logging
+
+
+  elasticsearch:
+    restart: always
+    image: elasticsearch:8.10.2
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms200m -Xmx200m"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    logging: *default-logging
+
+
+  redis:
+    restart: always
+    image: redis:latest
+    environment:
+      REDIS_USER: admin
+      REDIS_PASSWORD: admin
+    ports:
+      - 6379:6379
+    logging: *default-logging
+
+
+  etl:
+    build: ./etl
+    env_file: ./etl/.env
+    depends_on:
+      db:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
+    logging: *default-logging
+
+
+  elastic-logs:
+    image: elasticsearch:8.10.2
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms200m -Xmx200m"  
+    ports:
+      - 9201:9200
+
+    
+  logstash:
+    image: logstash:8.10.2
+    depends_on:
+      - elastic-logs
+    environment:
+      XPACK_MONITORING_ENABLED: "false"
+      ES_HOST: "elastic-logs:9200"
+    ports:
+      - "5045:5045/udp"
+    volumes:
+      - ./logstash.conf:/config/logstash.conf:ro
+    command: logstash -f /config/logstash.conf
+
+
+  kibana:
+    image: kibana:8.10.2
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elastic-logs:9200
+    logging: *default-logging
+
+
+  mongo_cnf_n1:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: mongo_cnf_n1
+  mongo_cnf_n2:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: mongo_cnf_n2
+  config_cnf_rs:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: config_cnf_rs
+  mongo_rs1_n1:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: mongo_rs1_n1
+  mongo_rs1_n2:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: mongo_rs1_n2
+  config_rs1:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: config_rs1
+  mongo_rs2_n1:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: mongo_rs2_n1
+  mongo_rs2_n2:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: mongo_rs2_n2
+  config_rs2:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: config_rs2
+  mongos:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: mongos
+  config_shared_cluster:
+    extends:
+      file: ./ugc/docker-compose.yml
+      service: config_shared_cluster
+volumes:
+  static_volume:
+  postgres_data:
+  esdata:
+  minio_storage: 
+  fileapi_db:
+  auth_db:
+  token_db:
+  kafka_0_data:
+  kafka_1_data:
+  kafka_2_data:
+  mongo_rs1_n1_data:
+  mongo_rs1_n2_data:
+  mongo_rs2_n1_data:
+  mongo_rs2_n2_data:
+  mongo_cnf_n1_data:
+  mongo_cnf_n2_data:

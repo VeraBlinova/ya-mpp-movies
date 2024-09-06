@@ -1,0 +1,10 @@
+sh.addShard("mongo_rs1/mongo_rs1_n1:27017,mongo_rs1_n2:27017")
+sh.addShard("mongo_rs2/mongo_rs2_n1:27017,mongo_rs2_n2:27017")
+
+sh.enableSharding("ugc_db")
+db.createCollection("ugc_db.reviews")
+db.createCollection("ugc_db.bookmarks")
+db.createCollection("ugc_db.likes")
+sh.shardCollection("ugc_db.rewiews", {"id": "hashed"})
+sh.shardCollection("ugc_db.bookmarks", {"id": "hashed"})
+sh.shardCollection("ugc_db.likes", {"id": "hashed"})

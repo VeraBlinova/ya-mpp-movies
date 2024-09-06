@@ -1,0 +1,116 @@
+version: '3'
+
+services:
+
+  eventapi:
+    extends:
+      file: ./docker-compose.yml
+      service: eventapi
+    ports:
+      - "5000:5000"
+    # Autoreload on code changes in debug mode
+    volumes:
+      - ./ugc/src/:/opt/app/
+    command: "python3 main.py"
+
+  kafka-0:
+    extends:
+      file: ./docker-compose.yml
+      service: kafka-0
+    ports:
+      - "9094:9092"
+
+  kafka-1:
+    extends:
+      file: ./docker-compose.yml
+      service: kafka-1
+    ports:
+      - "9095:9092"
+
+  kafka-2:
+    extends:
+      file: ./docker-compose.yml
+      service: kafka-2
+    ports:
+      - "9096:9092"
+
+  kafka-ui:
+    extends:
+      file: ./docker-compose.yml
+      service: kafka-ui
+    ports:
+      - "8080:8080"
+  
+  etl:
+    extends:
+      file: ./docker-compose.yml
+      service: etl
+
+  zookeeper:
+    extends:
+      file: ./docker-compose.yml
+      service: zookeeper
+
+  clickhouse:
+    extends:
+      file: ./docker-compose.yml
+      service: clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+
+  mongo_cnf_n1:
+    extends:
+      file: ./docker-compose.yml
+      service: mongo_cnf_n1
+  mongo_cnf_n2:
+    extends:
+      file: ./docker-compose.yml
+      service: mongo_cnf_n2
+  config_cnf_rs:
+    extends:
+      file: ./docker-compose.yml
+      service: config_cnf_rs
+  mongo_rs1_n1:
+    extends:
+      file: ./docker-compose.yml
+      service: mongo_rs1_n1
+  mongo_rs1_n2:
+    extends:
+      file: ./docker-compose.yml
+      service: mongo_rs1_n2
+  config_rs1:
+    extends:
+      file: ./docker-compose.yml
+      service: config_rs1
+  mongo_rs2_n1:
+    extends:
+      file: ./docker-compose.yml
+      service: mongo_rs2_n1
+  mongo_rs2_n2:
+    extends:
+      file: ./docker-compose.yml
+      service: mongo_rs2_n2
+  config_rs2:
+    extends:
+      file: ./docker-compose.yml
+      service: config_rs2
+  mongos:
+    extends:
+      file: ./docker-compose.yml
+      service: mongos
+  config_shared_cluster:
+    extends:
+      file: ./docker-compose.yml
+      service: config_shared_cluster
+
+volumes:
+  kafka_0_data:
+  kafka_1_data:
+  kafka_2_data:
+  mongo_rs1_n1_data:
+  mongo_rs1_n2_data:
+  mongo_rs2_n1_data:
+  mongo_rs2_n2_data:
+  mongo_cnf_n1_data:
+  mongo_cnf_n2_data:

@@ -1,0 +1,8 @@
+FROM python:3.11-alpine
+
+WORKDIR /src
+
+COPY ../../fastapi-solution/src .
+RUN pip3 install -r src/clickhouse/requirements.txt
+
+ENTRYPOINT ["python", "src/clickhouse/ch_load.py"]

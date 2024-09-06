@@ -1,0 +1,52 @@
+version: '3'
+services:
+  db-auth:
+    image: postgres:13
+    restart: "no"
+    command:
+      - "postgres"
+      - "-c"
+      - "search_path=public,auth_api"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U app -d auth_db" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    env_file: user-group-db/.env
+    volumes:
+        - ./user-group-db/init_pg:/docker-entrypoint-initdb.d
+        - auth_db:/var/lib/postgresql/data
+
+  db-token:
+    restart: always
+    image: redis:latest
+    environment:
+      REDIS_USER: admin
+      REDIS_PASSWORD: admin
+    volumes:
+      - token_db:/var/lib/redis/data
+
+  authapi-migrations:
+    build:
+      context: .
+    restart: no
+    depends_on:
+      db-auth:
+        condition: service_healthy
+    command: alembic upgrade head
+    env_file:
+      - ./api.env
+
+  authapi:
+    restart: always
+    build: .
+    env_file:
+      - ./api.env
+
+  jaeger-service:
+    image: jaegertracing/all-in-one:latest
+
+
+volumes:
+  token_db:
+  auth_db:

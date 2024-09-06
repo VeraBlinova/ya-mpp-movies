@@ -1,0 +1,36 @@
+version: '3'
+
+services:
+    clickhouse:
+        image: clickhouse/clickhouse-server:23
+        hostname: clickhouse
+        environment:
+            - ALLOW_EMPTY_PASSWORD=yes
+        ports:
+            - "8123:8123"
+            - "9000:9000"
+
+
+    vertica:
+        image: jbfavre/vertica
+        ports:
+            - "5440:5433"
+
+    ch_load:
+        build:
+            dockerfile: Dockerfile_CH
+        restart: unless-stopped
+        depends_on:
+            - clickhouse
+        volumes:
+            - .:/src
+    v_load:
+        build:
+            dockerfile: Dockerfile_Vert
+        restart: unless-stopped
+        depends_on:
+            - vertica
+        volumes:
+            - .:/src
+
+

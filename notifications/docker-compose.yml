@@ -1,0 +1,136 @@
+
+version: '3.8'
+
+x-logging:
+      &default-logging
+      driver: gelf
+      options:
+        gelf-address: udp://localhost:5045
+
+x-worker:
+      &celery-worker
+      logging: *default-logging
+      image: dja-admin
+      entrypoint: ['celery', '-A', 'celery_cron.celery', 'worker', '-l', 'debug']
+      volumes:
+        - ./dja_admin/:/app/
+      depends_on:
+        - dja-admin
+
+x-simple-worker:
+      &simple-worker
+      logging: *default-logging
+      build: ./simple_worker/
+      env_file:
+        - ./simple_worker/.env
+      volumes:
+        - ./simple_worker/:/app/
+      depends_on:
+        - rabbitmq
+        - db-notification
+
+services:
+
+  notifications:
+      image: notifications
+      build: ./api/
+      restart: always
+      env_file:
+          - .env
+      ports:
+          - "8000:8000"
+      volumes:
+      - ./api/:/opt/app
+  
+  db-notification:
+    logging: *default-logging
+    image: postgres
+    restart: "no"
+    command:
+      - "postgres"
+      - "-c"
+      - "search_path=public,content"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U app -d celery_cron" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    env_file: ./.env
+    volumes:
+      - ./db/init_pg:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+
+  migrations:
+    build:
+      context: ./api/src
+      dockerfile: Dockerfile-DB
+    command: alembic upgrade head
+    depends_on:
+      db-notification:
+        condition: service_healthy
+    env_file:
+      - ./.env
+    volumes:
+      - ./api/src/alembic:/alembic
+
+  rabbitmq:
+    logging: *default-logging
+    hostname: rabbitmq
+    image: rabbitmq:management
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin
+    volumes:
+      - rabbitmq:/var/lib/rabbitmq
+
+  worker-1:
+    <<: *celery-worker
+    hostname: worker-1
+    container_name: worker-1
+
+  worker-2:
+    <<: *celery-worker
+    hostname: worker-2
+    container_name: worker-2
+
+  worker-3:
+    <<: *celery-worker
+    hostname: worker-3
+    container_name: worker-3
+
+  worker-4:
+    <<: *simple-worker
+    hostname: worker-4
+    container_name: worker-4
+
+  flower:
+    <<: *celery-worker
+    hostname: flower
+    container_name: flower
+    entrypoint: ['celery', '-A', 'celery_cron.celery', 'flower', '-l', 'debug']
+    ports:
+      - 5555:5555
+
+  celery-beat:
+    <<: *celery-worker
+    hostname: beat
+    container_name: beat
+    entrypoint: ['celery', '-A', 'celery_cron.celery', 'beat', '-l', 'debug']
+
+  dja-admin:
+    logging: *default-logging
+    image: dja-admin
+    build: ./dja_admin/
+    volumes:
+      - ./dja_admin/:/app/
+    ports:
+      - 8080:8080
+    depends_on:
+      - rabbitmq
+      - migrations
+
+
+
+volumes:
+  postgres_data:
+  rabbitmq:

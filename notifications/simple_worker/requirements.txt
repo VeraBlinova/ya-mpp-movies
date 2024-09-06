@@ -1,0 +1,6 @@
+aio-pika==9.4.1
+asyncpg==0.29.0
+asyncio==3.4.3
+sqlalchemy==2.0.30
+sqlmodel==0.0.18
+pydantic_settings==2.2.1
